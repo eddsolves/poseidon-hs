@@ -42,7 +42,8 @@ import           Data.Aeson                           (FromJSON, Options (..),
                                                        defaultOptions,
                                                        genericToEncoding,
                                                        parseJSON, toEncoding,
-                                                       toJSON, (.:), withScientific, withObject)
+                                                       toJSON, withObject,
+                                                       (.:))
 import           Data.Aeson.Types                     (emptyObject)
 import           Data.Bifunctor                       (second)
 import qualified Data.ByteString.Char8                as Bchs
@@ -63,11 +64,6 @@ import           Options.Applicative.Help.Levenshtein (editDistance)
 import           SequenceFormats.Eigenstrat           (EigenstratIndEntry (..),
                                                        Sex (..))
 import qualified Text.Regex.TDFA                      as Reg
-import qualified Data.Text as T
-import Data.Aeson (withText)
-import Data.Text.Read (double)
-import Foreign.C (eRREMOTE)
-import Data.Bits (Bits(xor))
 
 newtype JannoSex = JannoSex { sfSex :: Sex }
     deriving (Eq)
@@ -313,25 +309,15 @@ instance ToJSON Latitude where
 --        else pure (Latitude val)
 
 instance FromJSON Latitude where
-    parseJSON = withText "Latitude" $ \t -> makeGoodDouble t >>= makeGoodLatitude
- 
+    parseJSON = withObject "Latitude" $ \v -> v .: "Latitude" >>= makeGoodLatitude
+
 instance Csv.FromField Latitude where
     parseField x = Csv.parseField x >>= makeGoodLatitude
 
-makeGoodDouble :: MonadFail m => T.Text -> m Double
-makeGoodDouble t = 
-    case double t of
-        Left err -> fail err
-        Right x ->
-            if T.null (snd x)
-            then pure (fst x)
-            else fail $ T.unpack (snd x)
-
 makeGoodLatitude :: MonadFail m => Double -> m Latitude
-makeGoodLatitude x = 
-        if x < -90 || x > 90
-        then fail $ "Latitude " ++ show x ++ " not between -90 and 90"
-        else pure (Latitude x)
+makeGoodLatitude x
+    | x >= -90 && x <= 90 = pure (Latitude x)
+    | otherwise           = fail $ "Latitude " ++ show x ++ " not between -90 and 90"
 
 instance Csv.ToField Latitude where
     toField (Latitude x) = Csv.toField x
